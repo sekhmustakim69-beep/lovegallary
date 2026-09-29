@@ -127,19 +127,24 @@ Then edit `.env` and set the values, for example:
 ```env
 SECRET_KEY=generate-a-long-random-secret
 DATABASE_URL=instance/love.db
+MONGODB_URI=your-mongodb-atlas-connection-string
+MONGODB_DATABASE=love_diary
 DEFAULT_RAJ_PASSWORD=replace-with-a-strong-unique-password
 DEFAULT_ASMITA_PASSWORD=replace-with-a-strong-unique-password
 ```
 
-## Step 9: Initialize the database and create accounts
+## Step 9: Migrate the existing SQLite data
 
-Run:
+If you already have `instance/love.db`, run the importers once before starting the app:
 
 ```bash
-python app.py
+python migrate_sqlite_to_mongo.py
+python migrate_photos_to_gridfs.py
 ```
 
-The app will automatically create the SQLite database and the default users:
+For a fresh install with no SQLite database, skip these import commands. On startup, the app creates MongoDB indexes and the default accounts.
+
+The SQLite importer refuses to overwrite populated MongoDB collections. The photo importer copies existing files to GridFS and leaves local copies as a backup. The app connects to Atlas and ensures the default users exist:
 
 - Raj
   - username: raj
@@ -180,9 +185,9 @@ and then:
 
 ## Important notes
 
-- Do not commit the `.env` file.
-- Keep your database in the `instance` folder.
-- Uploaded photos are saved in `uploads/photos`.
+- Do not commit or share the `.env` file or MongoDB connection string.
+- MongoDB Atlas stores app records and photo files in GridFS.
+- Keep `instance/love.db` and `uploads/photos` as backups until the Atlas data is verified.
 - The app is ready to grow into a larger project later.
 
 ## Features included in this MVP
@@ -196,7 +201,7 @@ and then:
 - Food wish tracker
 - Mood swing notes
 - Location sharing with browser geolocation
-- SQLite database structure with a clean modular layout
+- MongoDB collections for app records with GridFS photo storage
 
 ## Future ideas
 
@@ -229,7 +234,7 @@ If you get an import error, run:
 pip install -r requirements.txt
 ```
 
-If the database is not created yet, start the app once and it will initialize automatically.
+If the MongoDB connection fails, check the Atlas database user's permissions, network access list, and `MONGODB_URI` in `.env`.
 
 If the page does not load, check the terminal output for any error message.
 

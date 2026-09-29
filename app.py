@@ -1,7 +1,6 @@
 import os
 import random
 import secrets
-import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
@@ -14,6 +13,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     send_from_directory,
     session,
     url_for,
@@ -21,15 +21,23 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageOps, UnidentifiedImageError
+from gridfs import GridFSBucket
+from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
 
-from config import ALLOWED_EXTENSIONS, DATABASE, DEBUG, SECRET_KEY, UPLOAD_FOLDER
+from config import ALLOWED_EXTENSIONS, DEBUG, MONGODB_DATABASE, MONGODB_URI, SECRET_KEY, UPLOAD_FOLDER
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
-app.config["DATABASE"] = DATABASE
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 app.jinja_env.globals["csrf_token"] = lambda: session.get("csrf_token") or session.__setitem__("csrf_token", secrets.token_hex(16))
+
+if not MONGODB_URI:
+    raise RuntimeError("Set MONGODB_URI in your local .env file before starting the app.")
+
+mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=10000)
+mongo_db = mongo_client[MONGODB_DATABASE]
+photo_bucket = GridFSBucket(mongo_db, bucket_name="uploads")
 
 BIRTHDAYS = [
     {
@@ -194,99 +202,47 @@ def api_birthday_songs():
     })
 
 
-def get_db():
-    connection = sqlite3.connect(app.config["DATABASE"])
-    connection.row_factory = sqlite3.Row
-    return connection
-
-
 def init_db():
-    connection = get_db()
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            username TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
+    mongo_client.admin.command("ping")
+    mongo_db.users.create_index([("id", ASCENDING)], unique=True)
+    mongo_db.users.create_index([("username", ASCENDING)], unique=True)
+    mongo_db.live_locations.create_index([("user_id", ASCENDING)], unique=True)
+    mongo_db.live_locations.create_index([("expires_at", ASCENDING)])
 
-        CREATE TABLE IF NOT EXISTS photos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            filename TEXT NOT NULL,
-            caption TEXT,
-            uploaded_by INTEGER NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (uploaded_by) REFERENCES users(id)
-        );
+    for collection_name in ("photos", "messages", "music_history", "food_wishes", "partner_notes", "locations"):
+        mongo_db[collection_name].create_index([("id", ASCENDING)], unique=True)
 
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sender_id INTEGER NOT NULL,
-            receiver_id INTEGER NOT NULL,
-            message TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (sender_id) REFERENCES users(id),
-            FOREIGN KEY (receiver_id) REFERENCES users(id)
-        );
+    for collection_name in ("users", "photos", "messages", "music_history", "food_wishes", "partner_notes", "locations"):
+        latest = mongo_db[collection_name].find_one(sort=[("id", DESCENDING)])
+        if latest:
+            mongo_db.counters.update_one(
+                {"_id": collection_name},
+                {"$max": {"value": latest["id"]}},
+                upsert=True,
+            )
 
-        CREATE TABLE IF NOT EXISTS music_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            song_title TEXT NOT NULL,
-            youtube_url TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
 
-        CREATE TABLE IF NOT EXISTS food_wishes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            food_name TEXT NOT NULL,
-            note TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS partner_notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            note TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending',
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS locations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            latitude REAL NOT NULL,
-            longitude REAL NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS live_locations (
-            user_id INTEGER PRIMARY KEY,
-            latitude REAL NOT NULL,
-            longitude REAL NOT NULL,
-            started_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-        """
+def next_id(collection_name):
+    counter = mongo_db.counters.find_one_and_update(
+        {"_id": collection_name},
+        {"$inc": {"value": 1}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
     )
-    connection.commit()
-    connection.close()
+    return counter["value"]
+
+
+def document_by_id(collection_name, document_id):
+    if document_id is None:
+        return None
+    try:
+        document_id = int(document_id)
+    except (TypeError, ValueError):
+        return None
+    return mongo_db[collection_name].find_one({"id": document_id})
 
 
 def ensure_default_users():
-    connection = get_db()
     default_users = [
         ("Raj", "raj", "DEFAULT_RAJ_PASSWORD", os.getenv("DEFAULT_RAJ_PASSWORD")),
         ("Ashmita", "asmita", "DEFAULT_ASMITA_PASSWORD", os.getenv("DEFAULT_ASMITA_PASSWORD")),
@@ -294,23 +250,24 @@ def ensure_default_users():
 
     for name, username, password_variable, password in default_users:
         if not password or password.startswith("replace-"):
-            connection.close()
             raise RuntimeError(f"Set {password_variable} to a unique password in your local .env file.")
 
-        existing = connection.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,)).fetchone()
+        existing = mongo_db.users.find_one({"username": username})
         if existing:
-            connection.execute(
-                "UPDATE users SET name = ?, password_hash = ? WHERE username = ?",
-                (name, generate_password_hash(password), username),
+            mongo_db.users.update_one(
+                {"username": username},
+                {"$set": {"name": name, "password_hash": generate_password_hash(password)}},
             )
         else:
-            connection.execute(
-                "INSERT INTO users (name, username, password_hash, created_at) VALUES (?, ?, ?, ?)",
-                (name, username, generate_password_hash(password), datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")),
+            mongo_db.users.insert_one(
+                {
+                    "id": next_id("users"),
+                    "name": name,
+                    "username": username,
+                    "password_hash": generate_password_hash(password),
+                    "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                }
             )
-
-    connection.commit()
-    connection.close()
 
 
 @app.before_request
@@ -360,46 +317,37 @@ def login_required(view):
 
 
 def get_user_by_username(username):
-    conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    conn.close()
-    return user
+    return mongo_db.users.find_one({"username": username})
 
 
 def get_user_by_id(user_id):
-    conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    conn.close()
-    return user
+    return document_by_id("users", user_id)
 
 
 def partner_id(user_id):
-    conn = get_db()
-    partner = conn.execute("SELECT id FROM users WHERE id != ? ORDER BY id LIMIT 1", (user_id,)).fetchone()
-    conn.close()
+    partner = mongo_db.users.find_one({"id": {"$ne": int(user_id)}}, sort=[("id", ASCENDING)])
     if partner:
-        return partner["id"]
+        return partner.get("id")
     return None
+
+
+def attach_user(document, user_id_field, name_field):
+    if not document:
+        return None
+    result = dict(document)
+    user = get_user_by_id(result.get(user_id_field))
+    result[name_field] = user["name"] if user else "Unknown"
+    return result
 
 
 def get_latest_music():
-    conn = get_db()
-    item = conn.execute(
-        "SELECT mh.*, u.name AS user_name FROM music_history mh JOIN users u ON u.id = mh.user_id ORDER BY mh.created_at DESC LIMIT 1"
-    ).fetchone()
-    conn.close()
-    return item
+    item = mongo_db.music_history.find_one(sort=[("created_at", DESCENDING), ("id", DESCENDING)])
+    return attach_user(item, "user_id", "user_name")
 
 
 def get_previous_music():
-    conn = get_db()
-    row = conn.execute(
-        "SELECT mh.*, u.name AS user_name FROM music_history mh JOIN users u ON u.id = mh.user_id ORDER BY mh.created_at DESC LIMIT 2"
-    ).fetchall()
-    conn.close()
-    if len(row) > 1:
-        return row[1]
-    return None
+    row = next(mongo_db.music_history.find().sort([("created_at", DESCENDING), ("id", DESCENDING)]).skip(1).limit(1), None)
+    return attach_user(row, "user_id", "user_name")
 
 
 def classify_vibe(song_title):
@@ -457,26 +405,22 @@ def logout():
 def dashboard():
     user = get_user_by_id(session["user_id"])
     partner = get_user_by_id(partner_id(session["user_id"]))
-    conn = get_db()
-    photo_count = conn.execute("SELECT COUNT(*) FROM photos").fetchone()[0]
-    message_count = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
-    food_count = conn.execute("SELECT COUNT(*) FROM food_wishes").fetchone()[0]
-    note_count = conn.execute("SELECT COUNT(*) FROM partner_notes").fetchone()[0]
-    music_count = conn.execute("SELECT COUNT(*) FROM music_history").fetchone()[0]
-    location_count = conn.execute("SELECT COUNT(*) FROM locations").fetchone()[0]
-    latest_photo = conn.execute(
-        "SELECT p.*, u.name as uploader FROM photos p JOIN users u ON u.id = p.uploaded_by ORDER BY p.created_at DESC LIMIT 1"
-    ).fetchone()
-    latest_message = conn.execute(
-        "SELECT m.*, u.name as sender_name FROM messages m JOIN users u ON u.id = m.sender_id ORDER BY m.created_at DESC LIMIT 1"
-    ).fetchone()
-    latest_music = conn.execute(
-        "SELECT mh.*, u.name as user_name FROM music_history mh JOIN users u ON u.id = mh.user_id ORDER BY mh.created_at DESC LIMIT 1"
-    ).fetchone()
-    latest_note = conn.execute(
-        "SELECT pn.*, u.name as user_name FROM partner_notes pn JOIN users u ON u.id = pn.user_id ORDER BY pn.created_at DESC LIMIT 1"
-    ).fetchone()
-    conn.close()
+    photo_count = mongo_db.photos.count_documents({})
+    message_count = mongo_db.messages.count_documents({})
+    food_count = mongo_db.food_wishes.count_documents({})
+    note_count = mongo_db.partner_notes.count_documents({})
+    music_count = mongo_db.music_history.count_documents({})
+    location_count = mongo_db.locations.count_documents({})
+    latest_photo = mongo_db.photos.find_one(sort=[("created_at", DESCENDING), ("id", DESCENDING)])
+    latest_photo = attach_user(latest_photo, "uploaded_by", "uploader")
+    if latest_photo:
+        uploader = get_user_by_id(latest_photo["uploaded_by"])
+        latest_photo["uploader_username"] = uploader["username"] if uploader else ""
+    latest_message = mongo_db.messages.find_one(sort=[("created_at", DESCENDING), ("id", DESCENDING)])
+    latest_message = attach_user(latest_message, "sender_id", "sender_name")
+    latest_music = get_latest_music()
+    latest_note = mongo_db.partner_notes.find_one(sort=[("created_at", DESCENDING), ("id", DESCENDING)])
+    latest_note = attach_user(latest_note, "user_id", "user_name")
     return render_template(
         "dashboard.html",
         user=user,
@@ -556,41 +500,56 @@ def gallery():
             flash("An error occurred while compressing and saving the image.", "danger")
             return redirect(url_for("gallery"))
 
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO photos (filename, caption, uploaded_by, created_at) VALUES (?, ?, ?, ?)",
-            (unique_name, caption or "A treasured memory.", session["user_id"], datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")),
-        )
-        conn.commit()
-        conn.close()
+        local_photo_path = Path(app.config["UPLOAD_FOLDER"]) / unique_name
+        content_type = "image/gif" if unique_name.lower().endswith(".gif") else "image/webp"
+        try:
+            with local_photo_path.open("rb") as photo_stream:
+                photo_bucket.upload_from_stream(
+                    unique_name,
+                    photo_stream,
+                    metadata={"content_type": content_type},
+                )
+            local_photo_path.unlink(missing_ok=True)
+        except Exception:
+            local_photo_path.unlink(missing_ok=True)
+            flash("The photo could not be stored in MongoDB. Please try again.", "danger")
+            return redirect(url_for("gallery"))
+
+        mongo_db.photos.insert_one({
+            "id": next_id("photos"),
+            "filename": unique_name,
+            "caption": caption or "A treasured memory.",
+            "uploaded_by": session["user_id"],
+            "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        })
         flash("Photo uploaded and optimized successfully.", "success")
         return redirect(url_for("gallery"))
 
-    conn = get_db()
-    photos = conn.execute(
-        "SELECT p.*, u.name AS uploader, u.username AS uploader_username FROM photos p JOIN users u ON u.id = p.uploaded_by ORDER BY p.created_at DESC"
-    ).fetchall()
-    conn.close()
+    photos = [
+        attach_user(photo, "uploaded_by", "uploader")
+        for photo in mongo_db.photos.find().sort([("created_at", DESCENDING), ("id", DESCENDING)])
+    ]
+    for photo in photos:
+        uploader = get_user_by_id(photo["uploaded_by"])
+        photo["uploader_username"] = uploader["username"] if uploader else ""
     return render_template("gallery.html", photos=photos)
 
 
 @app.route("/gallery/delete/<int:photo_id>", methods=["POST"])
 @login_required
 def delete_gallery_photo(photo_id):
-    conn = get_db()
-    photo = conn.execute("SELECT * FROM photos WHERE id = ?", (photo_id,)).fetchone()
+    photo = document_by_id("photos", photo_id)
     if not photo:
-        conn.close()
         flash("Photo not found.", "warning")
         return redirect(url_for("gallery"))
 
-    file_path = Path(app.config["UPLOAD_FOLDER"]) / photo["filename"]
-    if file_path.exists():
-        file_path.unlink()
+    grid_file = next(photo_bucket.find({"filename": photo["filename"]}).sort("uploadDate", DESCENDING).limit(1), None)
+    if grid_file:
+        photo_bucket.delete(grid_file._id)
+    local_photo_path = Path(app.config["UPLOAD_FOLDER"]) / photo["filename"]
+    local_photo_path.unlink(missing_ok=True)
 
-    conn.execute("DELETE FROM photos WHERE id = ?", (photo_id,))
-    conn.commit()
-    conn.close()
+    mongo_db.photos.delete_one({"id": photo_id})
     flash("Photo deleted.", "success")
     return redirect(url_for("gallery"))
 
@@ -608,50 +567,44 @@ def messages():
             return redirect(url_for("messages"))
 
         receiver_id = int(request.form.get("receiver_id") or partner_id(session["user_id"]))
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO messages (sender_id, receiver_id, message, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-            (session["user_id"], receiver_id, message_text, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")),
-        )
-        conn.commit()
-        conn.close()
+        created_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        mongo_db.messages.insert_one({
+            "id": next_id("messages"),
+            "sender_id": session["user_id"],
+            "receiver_id": receiver_id,
+            "message": message_text,
+            "created_at": created_at,
+            "updated_at": created_at,
+        })
         flash("Your message was sent.", "success")
         return redirect(url_for("messages"))
 
-    conn = get_db()
-    message_rows = conn.execute(
-        """
-        SELECT m.*, s.name AS sender_name, r.name AS receiver_name
-        FROM messages m
-        JOIN users s ON s.id = m.sender_id
-        JOIN users r ON r.id = m.receiver_id
-        WHERE m.sender_id IN (?, ?) AND m.receiver_id IN (?, ?)
-        ORDER BY m.created_at DESC
-        """,
-        (session["user_id"], partner["id"], session["user_id"], partner["id"]),
-    ).fetchall()
-    conn.close()
+    participant_ids = [session["user_id"], partner["id"]] if partner else [session["user_id"]]
+    message_rows = list(mongo_db.messages.find({
+        "sender_id": {"$in": participant_ids},
+        "receiver_id": {"$in": participant_ids},
+    }).sort([("created_at", DESCENDING), ("id", DESCENDING)]))
+    for message in message_rows:
+        sender = get_user_by_id(message["sender_id"])
+        receiver = get_user_by_id(message["receiver_id"])
+        message["sender_name"] = sender["name"] if sender else "Unknown"
+        message["receiver_name"] = receiver["name"] if receiver else "Unknown"
     return render_template("messages.html", messages=message_rows, current_user=current_user, partner=partner)
 
 
 @app.route("/messages/delete/<int:message_id>", methods=["POST"])
 @login_required
 def delete_message(message_id):
-    conn = get_db()
-    item = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
+    item = document_by_id("messages", message_id)
     if not item:
-        conn.close()
         flash("Message not found.", "warning")
         return redirect(url_for("messages"))
 
     if item["sender_id"] != session["user_id"]:
-        conn.close()
         flash("You can only delete your own messages.", "danger")
         return redirect(url_for("messages"))
 
-    conn.execute("DELETE FROM messages WHERE id = ?", (message_id,))
-    conn.commit()
-    conn.close()
+    mongo_db.messages.delete_one({"id": message_id})
     flash("Message deleted.", "success")
     return redirect(url_for("messages"))
 
@@ -664,24 +617,19 @@ def edit_message(message_id):
         flash("Message cannot be empty.", "warning")
         return redirect(url_for("messages"))
 
-    conn = get_db()
-    item = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
+    item = document_by_id("messages", message_id)
     if not item:
-        conn.close()
         flash("Message not found.", "warning")
         return redirect(url_for("messages"))
 
     if item["sender_id"] != session["user_id"]:
-        conn.close()
         flash("You can only edit your own messages.", "danger")
         return redirect(url_for("messages"))
 
-    conn.execute(
-        "UPDATE messages SET message = ?, updated_at = ? WHERE id = ?",
-        (new_message, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), message_id),
+    mongo_db.messages.update_one(
+        {"id": message_id},
+        {"$set": {"message": new_message, "updated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")}},
     )
-    conn.commit()
-    conn.close()
     flash("Message updated.", "success")
     return redirect(url_for("messages"))
 
@@ -704,23 +652,22 @@ def music():
             title = song_name
             final_url = "https://www.youtube.com/results?search_query=" + quote(song_name)
 
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO music_history (user_id, song_title, youtube_url, created_at) VALUES (?, ?, ?, ?)",
-            (session["user_id"], title, final_url, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")),
-        )
-        conn.commit()
-        conn.close()
+        mongo_db.music_history.insert_one({
+            "id": next_id("music_history"),
+            "user_id": session["user_id"],
+            "song_title": title,
+            "youtube_url": final_url,
+            "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        })
         flash("Song saved successfully.", "success")
         return redirect(url_for("music"))
 
     latest = get_latest_music()
     previous = get_previous_music()
-    conn = get_db()
-    history = conn.execute(
-        "SELECT mh.*, u.name AS user_name FROM music_history mh JOIN users u ON u.id = mh.user_id ORDER BY mh.created_at DESC LIMIT 10"
-    ).fetchall()
-    conn.close()
+    history = [
+        attach_user(item, "user_id", "user_name")
+        for item in mongo_db.music_history.find().sort([("created_at", DESCENDING), ("id", DESCENDING)]).limit(10)
+    ]
     return render_template("music.html", latest=latest, previous=previous, history=history)
 
 
@@ -744,42 +691,36 @@ def food():
             flash("Food name is required.", "warning")
             return redirect(url_for("food"))
 
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO food_wishes (user_id, food_name, note, created_at) VALUES (?, ?, ?, ?)",
-            (session["user_id"], food_name, note, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")),
-        )
-        conn.commit()
-        conn.close()
+        mongo_db.food_wishes.insert_one({
+            "id": next_id("food_wishes"),
+            "user_id": session["user_id"],
+            "food_name": food_name,
+            "note": note,
+            "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        })
         flash("Food wish added.", "success")
         return redirect(url_for("food"))
 
-    conn = get_db()
-    food_items = conn.execute(
-        "SELECT fw.*, u.name AS user_name FROM food_wishes fw JOIN users u ON u.id = fw.user_id ORDER BY fw.created_at DESC"
-    ).fetchall()
-    conn.close()
+    food_items = [
+        attach_user(item, "user_id", "user_name")
+        for item in mongo_db.food_wishes.find().sort([("created_at", DESCENDING), ("id", DESCENDING)])
+    ]
     return render_template("food.html", food_items=food_items)
 
 
 @app.route("/food/delete/<int:food_id>", methods=["POST"])
 @login_required
 def delete_food(food_id):
-    conn = get_db()
-    item = conn.execute("SELECT * FROM food_wishes WHERE id = ?", (food_id,)).fetchone()
+    item = document_by_id("food_wishes", food_id)
     if not item:
-        conn.close()
         flash("Food wish not found.", "warning")
         return redirect(url_for("food"))
 
     if item["user_id"] != session["user_id"]:
-        conn.close()
         flash("You can only delete your own food wish.", "danger")
         return redirect(url_for("food"))
 
-    conn.execute("DELETE FROM food_wishes WHERE id = ?", (food_id,))
-    conn.commit()
-    conn.close()
+    mongo_db.food_wishes.delete_one({"id": food_id})
     flash("Food wish deleted.", "success")
     return redirect(url_for("food"))
 
@@ -793,24 +734,19 @@ def edit_food(food_id):
         flash("Food name is required.", "warning")
         return redirect(url_for("food"))
 
-    conn = get_db()
-    item = conn.execute("SELECT * FROM food_wishes WHERE id = ?", (food_id,)).fetchone()
+    item = document_by_id("food_wishes", food_id)
     if not item:
-        conn.close()
         flash("Food wish not found.", "warning")
         return redirect(url_for("food"))
 
     if item["user_id"] != session["user_id"]:
-        conn.close()
         flash("You can only edit your own food wish.", "danger")
         return redirect(url_for("food"))
 
-    conn.execute(
-        "UPDATE food_wishes SET food_name = ?, note = ? WHERE id = ?",
-        (food_name, note, food_id),
+    mongo_db.food_wishes.update_one(
+        {"id": food_id},
+        {"$set": {"food_name": food_name, "note": note}},
     )
-    conn.commit()
-    conn.close()
     flash("Food wish updated.", "success")
     return redirect(url_for("food"))
 
@@ -825,42 +761,38 @@ def mood_swings():
             flash("Please write a note.", "warning")
             return redirect(url_for("mood_swings"))
 
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO partner_notes (user_id, note, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-            (session["user_id"], note_text, status, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")),
-        )
-        conn.commit()
-        conn.close()
+        created_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        mongo_db.partner_notes.insert_one({
+            "id": next_id("partner_notes"),
+            "user_id": session["user_id"],
+            "note": note_text,
+            "status": status,
+            "created_at": created_at,
+            "updated_at": created_at,
+        })
         flash("Your note is now shared.", "success")
         return redirect(url_for("mood_swings"))
 
-    conn = get_db()
-    notes = conn.execute(
-        "SELECT pn.*, u.name AS user_name FROM partner_notes pn JOIN users u ON u.id = pn.user_id ORDER BY pn.created_at DESC"
-    ).fetchall()
-    conn.close()
+    notes = [
+        attach_user(item, "user_id", "user_name")
+        for item in mongo_db.partner_notes.find().sort([("created_at", DESCENDING), ("id", DESCENDING)])
+    ]
     return render_template("mood_swings.html", notes=notes)
 
 
 @app.route("/mood-swings/delete/<int:note_id>", methods=["POST"])
 @login_required
 def delete_note(note_id):
-    conn = get_db()
-    item = conn.execute("SELECT * FROM partner_notes WHERE id = ?", (note_id,)).fetchone()
+    item = document_by_id("partner_notes", note_id)
     if not item:
-        conn.close()
         flash("Note not found.", "warning")
         return redirect(url_for("mood_swings"))
 
     if item["user_id"] != session["user_id"]:
-        conn.close()
         flash("You can only delete your own note.", "danger")
         return redirect(url_for("mood_swings"))
 
-    conn.execute("DELETE FROM partner_notes WHERE id = ?", (note_id,))
-    conn.commit()
-    conn.close()
+    mongo_db.partner_notes.delete_one({"id": note_id})
     flash("Note deleted.", "success")
     return redirect(url_for("mood_swings"))
 
@@ -874,24 +806,19 @@ def edit_note(note_id):
         flash("Note cannot be empty.", "warning")
         return redirect(url_for("mood_swings"))
 
-    conn = get_db()
-    item = conn.execute("SELECT * FROM partner_notes WHERE id = ?", (note_id,)).fetchone()
+    item = document_by_id("partner_notes", note_id)
     if not item:
-        conn.close()
         flash("Note not found.", "warning")
         return redirect(url_for("mood_swings"))
 
     if item["user_id"] != session["user_id"]:
-        conn.close()
         flash("You can only edit your own note.", "danger")
         return redirect(url_for("mood_swings"))
 
-    conn.execute(
-        "UPDATE partner_notes SET note = ?, status = ?, updated_at = ? WHERE id = ?",
-        (note_text, status, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), note_id),
+    mongo_db.partner_notes.update_one(
+        {"id": note_id},
+        {"$set": {"note": note_text, "status": status, "updated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")}},
     )
-    conn.commit()
-    conn.close()
     flash("Note updated.", "success")
     return redirect(url_for("mood_swings"))
 
@@ -899,15 +826,15 @@ def edit_note(note_id):
 @app.route("/location", methods=["GET", "POST"])
 @login_required
 def location():
-    conn = get_db()
-    recent_locations = conn.execute(
-        "SELECT l.*, u.name AS user_name FROM locations l JOIN users u ON u.id = l.user_id ORDER BY l.created_at DESC"
-    ).fetchall()
-    active_live_locations = conn.execute(
-        "SELECT l.*, u.name AS user_name FROM live_locations l JOIN users u ON u.id = l.user_id WHERE l.expires_at > ? ORDER BY l.updated_at DESC",
-        (datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),),
-    ).fetchall()
-    conn.close()
+    recent_locations = [
+        attach_user(item, "user_id", "user_name")
+        for item in mongo_db.locations.find().sort([("created_at", DESCENDING), ("id", DESCENDING)])
+    ]
+    now_text = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    active_live_locations = [
+        attach_user(item, "user_id", "user_name")
+        for item in mongo_db.live_locations.find({"expires_at": {"$gt": now_text}}).sort("updated_at", DESCENDING)
+    ]
     map_location = active_live_locations[0] if active_live_locations else (recent_locations[0] if recent_locations else None)
     return render_template(
         "location.html",
@@ -940,13 +867,13 @@ def share_location():
         flash("Invalid location coordinates.", "danger")
         return redirect(url_for("location"))
 
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO locations (user_id, latitude, longitude, created_at) VALUES (?, ?, ?, ?)",
-        (session["user_id"], lat_value, lon_value, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")),
-    )
-    conn.commit()
-    conn.close()
+    mongo_db.locations.insert_one({
+        "id": next_id("locations"),
+        "user_id": session["user_id"],
+        "latitude": lat_value,
+        "longitude": lon_value,
+        "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+    })
 
     if request.is_json:
         return jsonify({"status": "Location shared successfully."})
@@ -957,69 +884,58 @@ def share_location():
 @app.route("/api/location/live", methods=["GET", "POST"])
 @login_required
 def api_live_location():
-    conn = get_db()
     now = datetime.utcnow()
     now_text = now.strftime("%Y-%m-%d %H:%M:%S")
 
     if request.method == "GET":
-        locations = conn.execute(
-            "SELECT l.user_id, u.name AS user_name, l.latitude, l.longitude, l.started_at, l.updated_at, l.expires_at "
-            "FROM live_locations l JOIN users u ON u.id = l.user_id WHERE l.expires_at > ? ORDER BY l.updated_at DESC",
-            (now_text,),
-        ).fetchall()
-        conn.close()
-        return jsonify({"locations": [dict(item) for item in locations]})
+        locations = [
+            attach_user(item, "user_id", "user_name")
+            for item in mongo_db.live_locations.find({"expires_at": {"$gt": now_text}}).sort("updated_at", DESCENDING)
+        ]
+        return jsonify({"locations": locations})
 
     data = request.get_json(silent=True) or request.form
     action = (data.get("action") or "").strip().lower()
     user_id = session["user_id"]
 
     if action == "stop":
-        conn.execute("DELETE FROM live_locations WHERE user_id = ?", (user_id,))
-        conn.commit()
-        conn.close()
+        mongo_db.live_locations.delete_one({"user_id": user_id})
         return jsonify({"status": "stopped"})
 
     if action not in {"start", "update"}:
-        conn.close()
         return jsonify({"error": "Choose start, update, or stop."}), 400
 
     try:
         latitude = float(data.get("latitude"))
         longitude = float(data.get("longitude"))
     except (TypeError, ValueError):
-        conn.close()
         return jsonify({"error": "Valid latitude and longitude are required."}), 400
 
     if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
-        conn.close()
         return jsonify({"error": "Coordinates are outside the valid range."}), 400
 
     expires_at = (now + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
     if action == "start":
-        conn.execute(
-            "INSERT INTO live_locations (user_id, latitude, longitude, started_at, updated_at, expires_at) "
-            "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
-            "latitude = excluded.latitude, longitude = excluded.longitude, started_at = excluded.started_at, "
-            "updated_at = excluded.updated_at, expires_at = excluded.expires_at",
-            (user_id, latitude, longitude, now_text, now_text, expires_at),
+        mongo_db.live_locations.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "latitude": latitude,
+                "longitude": longitude,
+                "started_at": now_text,
+                "updated_at": now_text,
+                "expires_at": expires_at,
+            }, "$setOnInsert": {"user_id": user_id}},
+            upsert=True,
         )
     else:
-        result = conn.execute(
-            "UPDATE live_locations SET latitude = ?, longitude = ?, updated_at = ? "
-            "WHERE user_id = ? AND expires_at > ?",
-            (latitude, longitude, now_text, user_id, now_text),
+        result = mongo_db.live_locations.update_one(
+            {"user_id": user_id, "expires_at": {"$gt": now_text}},
+            {"$set": {"latitude": latitude, "longitude": longitude, "updated_at": now_text}},
         )
-        if result.rowcount == 0:
-            conn.close()
+        if result.matched_count == 0:
             return jsonify({"error": "Live sharing has ended. Start sharing again."}), 409
 
-    saved_location = conn.execute(
-        "SELECT expires_at FROM live_locations WHERE user_id = ?",
-        (user_id,),
-    ).fetchone()
-    conn.commit()
-    conn.close()
+    saved_location = mongo_db.live_locations.find_one({"user_id": user_id}, {"expires_at": 1})
     return jsonify({"status": "sharing", "expires_at": saved_location["expires_at"]})
 
 
@@ -1027,21 +943,16 @@ def api_live_location():
 @app.route("/location/delete/<int:location_id>", methods=["POST"])
 @login_required
 def delete_location(location_id):
-    conn = get_db()
-    item = conn.execute("SELECT * FROM locations WHERE id = ?", (location_id,)).fetchone()
+    item = document_by_id("locations", location_id)
     if not item:
-        conn.close()
         flash("Location not found.", "warning")
         return redirect(url_for("location"))
 
     if item["user_id"] != session["user_id"]:
-        conn.close()
         flash("You can only delete your own location records.", "danger")
         return redirect(url_for("location"))
 
-    conn.execute("DELETE FROM locations WHERE id = ?", (location_id,))
-    conn.commit()
-    conn.close()
+    mongo_db.locations.delete_one({"id": location_id})
     flash("Location history deleted.", "success")
     return redirect(url_for("location"))
 
@@ -1049,12 +960,18 @@ def delete_location(location_id):
 @app.route("/uploads/photos/<path:filename>")
 @login_required
 def uploaded_photo(filename):
+    grid_file = next(photo_bucket.find({"filename": filename}).sort("uploadDate", DESCENDING).limit(1), None)
+    if grid_file:
+        metadata = grid_file.metadata or {}
+        return send_file(
+            photo_bucket.open_download_stream(grid_file._id),
+            mimetype=metadata.get("content_type", "application/octet-stream"),
+            download_name=filename,
+        )
     return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
 with app.app_context():
-    if not os.path.exists(os.path.dirname(DATABASE)):
-        os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
     if not os.path.exists(app.config["UPLOAD_FOLDER"]):
         os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     init_db()

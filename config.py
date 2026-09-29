@@ -12,6 +12,8 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
 	raise RuntimeError("Set SECRET_KEY in your local .env file before starting the app.")
 DATABASE_URL = os.getenv("DATABASE_URL", str(INSTANCE_DIR / "love.db"))
+MONGODB_URI = os.getenv("MONGODB_URI")
+MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "love_diary")
 DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
