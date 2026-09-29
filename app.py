@@ -35,15 +35,9 @@ app.jinja_env.globals["csrf_token"] = lambda: session.get("csrf_token") or sessi
 if not MONGODB_URI:
     raise RuntimeError("Set MONGODB_URI in your local .env file before starting the app.")
 
-try:
-    import certifi
-    mongo_client = MongoClient(MONGODB_URI, tlsCAFile=certifi.where(), serverSelectionTimeoutMS=10000)
-except Exception:
-    mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=10000)
-
+mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=10000)
 mongo_db = mongo_client[MONGODB_DATABASE]
 photo_bucket = GridFSBucket(mongo_db, bucket_name="uploads")
-
 
 BIRTHDAYS = [
     {
