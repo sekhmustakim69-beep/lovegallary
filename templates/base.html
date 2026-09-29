@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07151B" />
+    <title>{% block title %}Our Little World — Raj & Ashmita{% endblock %}</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💖</text></svg>" />
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    
+    <!-- Bootstrap 5 & Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+    
+    <!-- Custom Design System Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=5.8" />
+  </head>
+  <body{% if session.get('user_id') %} class="with-sidebar" data-live-location-url="{{ url_for('api_live_location') }}" data-csrf-token="{{ session.get('csrf_token') }}" data-current-user-id="{{ session.get('user_id') }}"{% endif %}>
+    {% if birthday_info %}
+      {% include 'birthday_celebration.html' %}
+    {% endif %}
+
+    <div class="page-shell">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 99999;">
+            {% for category, message in messages %}
+              <div class="toast custom-lux-toast show align-items-center toast-{{ category }}" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex align-items-center">
+                  <div class="toast-icon me-2">
+                    {% if category == 'success' %}
+                      <i class="bi bi-check2-circle text-success"></i>
+                    {% elif category == 'danger' %}
+                      <i class="bi bi-exclamation-circle text-danger"></i>
+                    {% elif category == 'warning' %}
+                      <i class="bi bi-exclamation-triangle text-warning"></i>
+                    {% else %}
+                      <i class="bi bi-info-circle text-primary"></i>
+                    {% endif %}
+                  </div>
+                  <div class="toast-body">{{ message }}</div>
+                  <button type="button" class="btn-close ms-auto me-2" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </div>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner">
+        <a class="site-footer-brand" href="{{ url_for('dashboard') if session.get('user_id') else url_for('index') }}">
+          <span class="footer-heart"><i class="bi bi-heart-fill"></i></span>
+          <span>Our Little World</span>
+        </a>
+        <p class="site-footer-note">A little place for Raj &amp; Ashmita to keep the moments that matter.</p>
+        <nav class="site-footer-links" aria-label="Footer navigation">
+          {% if session.get('user_id') %}
+            <a href="{{ url_for('dashboard') }}">Home</a>
+            <a href="{{ url_for('gallery') }}">Memories</a>
+            <a href="{{ url_for('messages') }}">Messages</a>
+            <a href="{{ url_for('location') }}">Location</a>
+          {% else %}
+            <a href="{{ url_for('index') }}">Home</a>
+            <a href="{{ url_for('login') }}">Sign in</a>
+          {% endif %}
+        </nav>
+        <small class="site-footer-copyright">&copy; {{ current_year }} Our Little World</small>
+      </div>
+    </footer>
+
+    <!-- Animation Engines: GSAP & Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom Application JS -->
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=5.5"></script>
+    {% if birthday_info %}
+      <script src="{{ url_for('static', filename='js/birthday.js') }}?v=4.6"></script>
+    {% endif %}
+
+  </body>
+</html>

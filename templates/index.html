@@ -1,0 +1,334 @@
+{% extends 'base.html' %}
+
+{% block title %}Our Little World — Raj & Ashmita ❤️{% endblock %}
+
+{% block content %}
+<div class="frontpage-wrapper">
+  <!-- Interactive Canvas for Floating Hearts & Sparkles -->
+  <canvas id="loveParticlesCanvas" class="love-particles-canvas"></canvas>
+
+  <!-- Hero Aurora & Radiant Mesh Layers -->
+  <div class="aurora-backdrop" aria-hidden="true">
+    <div class="aurora-blob blob-purple"></div>
+    <div class="aurora-blob blob-pink"></div>
+    <div class="aurora-blob blob-gold"></div>
+    <div class="aurora-mesh-grid"></div>
+  </div>
+
+  <!-- Hero Section -->
+  <section class="frontpage-hero position-relative">
+    <div class="container hero-inner text-center position-relative">
+      
+      <!-- Top Luxury Tag Pill -->
+      <div class="romantic-tag-pill mb-4">
+        <span class="sparkle-icon">✨</span>
+        <span class="tag-text">A PRIVATE LOVE ARCHIVE • ESTABLISHED FOREVER</span>
+        <span class="sparkle-icon">✨</span>
+      </div>
+
+      <!-- Main Headline -->
+      <h1 class="hero-title-gradient">
+        Our Little World
+        <span class="heart-pulse-glow" title="Beating Heart">❤️</span>
+      </h1>
+
+      <!-- Dynamic Romantic Typewriter -->
+      <div class="typewriter-container my-3">
+        <p class="typewriter-line">
+          <span id="typewriterText">Two hearts. One endless love story.</span>
+          <span class="typewriter-caret"></span>
+        </p>
+      </div>
+
+      <!-- Floating Keepsake Cards Showcase -->
+      <div class="hero-keepsakes-grid my-5">
+        <!-- Keepsake 1: Memory Polaroid -->
+        <div class="keepsake-card card-polaroid float-card-1">
+          <div class="polaroid-pin">📌</div>
+          <div class="polaroid-preview">
+            <span class="polaroid-icon">📸</span>
+          </div>
+          <p class="polaroid-caption">"With you, every second becomes an unforgettable treasure."</p>
+          <div class="polaroid-meta">
+            <span class="polaroid-date">Raj ❤️ Ashmita</span>
+            <span class="polaroid-badge">Forever</span>
+          </div>
+        </div>
+
+        <!-- Keepsake 2: Couple Capsule Badge (Center) -->
+        <div class="keepsake-card card-couple-capsule float-card-center">
+          <div class="d-flex align-items-center justify-content-center gap-3">
+            <div class="avatar-capsule">
+              <span class="avatar-emoji">🤴</span>
+              <span class="avatar-title">Raj</span>
+            </div>
+
+            <div class="infinity-connector">
+              <div class="glowing-heart-beating">💖</div>
+              <span class="infinity-badge">SOULMATES</span>
+            </div>
+
+            <div class="avatar-capsule">
+              <span class="avatar-emoji">👸</span>
+              <span class="avatar-title">Ashmita</span>
+            </div>
+          </div>
+          <div class="capsule-subtext mt-2">
+            <span>Two Hearts • One Love • Bound By Destiny</span>
+          </div>
+        </div>
+
+        <!-- Keepsake 3: Music Melody Note -->
+        <button type="button" class="keepsake-card card-melody float-card-2" id="homeSongToggle" aria-label="Play Tum Se Hi on this page" aria-pressed="false">
+          <span class="melody-header d-flex align-items-center gap-3 mb-2">
+            <span class="melody-disc-spin">
+              <i class="bi bi-disc-fill"></i>
+            </span>
+            <span class="text-start">
+              <span class="melody-title d-block">Tum Se Hi</span>
+              <small class="melody-artist" id="homeSongStatus" aria-live="polite">Tap to listen here</small>
+            </span>
+          </span>
+          <span class="mini-equalizer">
+            <span></span><span></span><span></span><span></span><span></span>
+          </span>
+        </button>
+        <div class="home-song-player" id="homeSongPlayer" aria-hidden="true"></div>
+      </div>
+
+      <!-- Hero Call-To-Action Buttons -->
+      <div class="hero-buttons-wrap d-flex justify-content-center gap-3 flex-wrap">
+        {% if session.get('user_id') %}
+          <a href="{{ url_for('dashboard') }}" class="btn btn-aurora-glow btn-lg">
+            <i class="bi bi-door-open-fill me-2"></i> Enter Our World
+          </a>
+        {% else %}
+          <a href="{{ url_for('login') }}" class="btn btn-aurora-glow btn-lg">
+            <i class="bi bi-heart-fill me-2"></i> Enter Our World
+          </a>
+        {% endif %}
+        <a href="#exploreChapters" class="btn btn-glass-outline btn-lg">
+          <i class="bi bi-stars me-2"></i> Explore Chapters
+        </a>
+      </div>
+
+      <!-- Relationship Highlights Bar -->
+      <div class="love-stats-pill-bar mt-5 mx-auto">
+        <div class="stat-pill-item">
+          <span class="stat-icon">📸</span>
+          <span class="stat-desc">Timeless Memories</span>
+        </div>
+        <div class="stat-pill-divider"></div>
+        <div class="stat-pill-item">
+          <span class="stat-icon">💌</span>
+          <span class="stat-desc">Secret Whispers</span>
+        </div>
+        <div class="stat-pill-divider"></div>
+        <div class="stat-pill-item">
+          <span class="stat-icon">🎵</span>
+          <span class="stat-desc">Romantic Soundtrack</span>
+        </div>
+        <div class="stat-pill-divider"></div>
+        <div class="stat-pill-item">
+          <span class="stat-icon">📍</span>
+          <span class="stat-desc">Cherished Places</span>
+        </div>
+      </div>
+
+      <!-- Scroll Indicator -->
+      <div class="hero-scroll-cue mt-5">
+        <a href="#exploreChapters" class="scroll-cue-link">
+          <span>Scroll to explore our story</span>
+          <i class="bi bi-chevron-double-down scroll-bounce"></i>
+        </a>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Interactive Secret Love Letter Generator Section -->
+  <section class="love-letter-section py-5 position-relative">
+    <div class="container">
+      <div class="love-letter-box mx-auto text-center p-4 p-md-5">
+        <div class="letter-wax-stamp mb-3">
+          <i class="bi bi-envelope-heart-fill"></i>
+        </div>
+        <span class="mini-badge-rose mb-2">Secret Whisper</span>
+        <h4 class="letter-heading mb-3">A Note From The Heart</h4>
+        <p class="letter-text fst-italic" id="loveQuoteText">
+          "In a sea of people, my eyes will always search for you."
+        </p>
+        <div class="mt-4 d-flex justify-content-center gap-2 flex-wrap">
+          <button type="button" class="btn btn-sm btn-love-sparkle" id="nextLoveQuoteBtn">
+            <i class="bi bi-arrow-repeat me-1"></i> Draw Another Love Note 💌
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Chapters Showcase (Bento Grid) -->
+  <section id="exploreChapters" class="chapters-showcase-section py-5 position-relative">
+    <div class="container">
+      <div class="section-title-wrap text-center mb-5">
+        <span class="mini-badge-rose mb-2">The Sanctuary</span>
+        <h2 class="section-main-heading">Chapters of Our World</h2>
+        <p class="section-sub-text">Every detail designed specifically for Raj & Ashmita to cherish forever.</p>
+      </div>
+
+      <div class="row g-4 justify-content-center">
+        <!-- Chapter 1: Memories Gallery -->
+        <div class="col-md-6 col-lg-4">
+          <div class="sanctuary-card">
+            <div class="card-glow-border"></div>
+            <div class="card-inner-content p-4">
+              <div class="card-icon-halo icon-halo-rose">
+                <i class="bi bi-camera-fill"></i>
+              </div>
+              <h4 class="card-title">Cherished Photos</h4>
+              <p class="card-desc">
+                Crystal clear memories saved with automatic compression and high-res lightbox to keep our smiles timeless.
+              </p>
+              <div class="card-footer-pill">
+                <span class="badge-dot"></span>
+                <span>Private Photo Album</span>
+              </div>
+              <div class="card-sparkle-corner">📸</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chapter 2: Secret Letters -->
+        <div class="col-md-6 col-lg-4">
+          <div class="sanctuary-card">
+            <div class="card-glow-border"></div>
+            <div class="card-inner-content p-4">
+              <div class="card-icon-halo icon-halo-purple">
+                <i class="bi bi-envelope-heart-fill"></i>
+              </div>
+              <h4 class="card-title">Love Letters</h4>
+              <p class="card-desc">
+                Private romantic whispers, midnight thoughts, and affectionate messages sealed strictly between the two of us.
+              </p>
+              <div class="card-footer-pill">
+                <span class="badge-dot"></span>
+                <span>Encrypted Whispers</span>
+              </div>
+              <div class="card-sparkle-corner">💌</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chapter 3: Melodies -->
+        <div class="col-md-6 col-lg-4">
+          <div class="sanctuary-card">
+            <div class="card-glow-border"></div>
+            <div class="card-inner-content p-4">
+              <div class="card-icon-halo icon-halo-gold">
+                <i class="bi bi-music-note-beamed"></i>
+              </div>
+              <h4 class="card-title">Our Soundtrack</h4>
+              <p class="card-desc">
+                Romantic Hindi classics and personal songs with YouTube player sync that capture our vibe whenever we miss each other.
+              </p>
+              <div class="card-footer-pill">
+                <span class="badge-dot"></span>
+                <span>Shared Playlist</span>
+              </div>
+              <div class="card-sparkle-corner">🎵</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chapter 4: Food Cravings -->
+        <div class="col-md-6 col-lg-4">
+          <div class="sanctuary-card">
+            <div class="card-glow-border"></div>
+            <div class="card-inner-content p-4">
+              <div class="card-icon-halo icon-halo-rose">
+                <i class="bi bi-cake2-fill"></i>
+              </div>
+              <h4 class="card-title">Foodie Wishes</h4>
+              <p class="card-desc">
+                Late night cravings, cute street food dates, and our favorite comfort dishes ready to savor side-by-side.
+              </p>
+              <div class="card-footer-pill">
+                <span class="badge-dot"></span>
+                <span>Date Night Menu</span>
+              </div>
+              <div class="card-sparkle-corner">🍰</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chapter 5: Mood Hugs -->
+        <div class="col-md-6 col-lg-4">
+          <div class="sanctuary-card">
+            <div class="card-glow-border"></div>
+            <div class="card-inner-content p-4">
+              <div class="card-icon-halo icon-halo-purple">
+                <i class="bi bi-heart-pulse-fill"></i>
+              </div>
+              <h4 class="card-title">Moods & Reassurance</h4>
+              <p class="card-desc">
+                A warm sanctuary for happy days, stormy mood swings, gentle check-ins, and reassuring comfort notes.
+              </p>
+              <div class="card-footer-pill">
+                <span class="badge-dot"></span>
+                <span>Emotional Care</span>
+              </div>
+              <div class="card-sparkle-corner">🥰</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chapter 6: Location Spots -->
+        <div class="col-md-6 col-lg-4">
+          <div class="sanctuary-card">
+            <div class="card-glow-border"></div>
+            <div class="card-inner-content p-4">
+              <div class="card-icon-halo icon-halo-gold">
+                <i class="bi bi-geo-alt-fill"></i>
+              </div>
+              <h4 class="card-title">Our Special Spots</h4>
+              <p class="card-desc">
+                Pinning the coordinates where we held hands, shared laughs, and created unforgettable history together.
+              </p>
+              <div class="card-footer-pill">
+                <span class="badge-dot"></span>
+                <span>Love Map Pins</span>
+              </div>
+              <div class="card-sparkle-corner">📍</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Enter Button -->
+      <div class="text-center mt-5">
+        {% if session.get('user_id') %}
+          <a href="{{ url_for('dashboard') }}" class="btn btn-aurora-glow btn-lg px-5">
+            Open Dashboard <i class="bi bi-arrow-right ms-2"></i>
+          </a>
+        {% else %}
+          <a href="{{ url_for('login') }}" class="btn btn-aurora-glow btn-lg px-5">
+            Sign In to Our Space <i class="bi bi-arrow-right ms-2"></i>
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <!-- Romantic Poetic Banner -->
+  <section class="romantic-quote-banner py-5 text-center">
+    <div class="container">
+      <div class="quote-symbol mb-3">🌹</div>
+      <blockquote class="lead-quote">
+        "I have found the one whom my soul loves."
+      </blockquote>
+      <p class="quote-author">Raj & Ashmita</p>
+    </div>
+  </section>
+
+</div>
+{% endblock %}

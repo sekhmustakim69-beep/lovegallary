@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Sign In — Our Little World{% endblock %}
+
+{% block content %}
+<section class="auth-section d-flex align-items-center justify-content-center position-relative min-vh-100 py-5">
+  <!-- Ambient Aurora Backdrops -->
+  <div class="auth-aurora" aria-hidden="true">
+    <div class="auth-orb orb-a"></div>
+    <div class="auth-orb orb-b"></div>
+  </div>
+
+  <div class="container position-relative">
+    <div class="row justify-content-center">
+      <div class="col-11 col-sm-9 col-md-7 col-lg-5 col-xl-4">
+        
+        <div class="auth-card lux-glass-panel text-center p-4 p-md-5">
+          <!-- Back Link -->
+          <div class="text-start mb-3">
+            <a href="{{ url_for('index') }}" class="back-link small text-decoration-none">
+              <i class="bi bi-arrow-left me-1"></i> Back to Home
+            </a>
+          </div>
+
+          <!-- Logo Badge -->
+          <div class="auth-logo-badge mb-3">
+            <span class="auth-heart-pulse">💖</span>
+          </div>
+
+          <h2 class="auth-title mb-1">Our Little World</h2>
+          <p class="auth-subtitle mb-4">A private sanctuary for Raj & Ashmita ❤️</p>
+
+          <!-- Login Form -->
+          <form method="post" action="{{ url_for('login') }}" class="text-start">
+            <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+            
+            <div class="form-group mb-3">
+              <label for="username" class="form-label-modern">Username</label>
+              <div class="input-group-modern">
+                <span class="input-group-icon"><i class="bi bi-person-fill"></i></span>
+                <input type="text" class="form-control-modern" id="username" name="username" placeholder="Enter your username" required autocomplete="username" />
+              </div>
+            </div>
+
+            <div class="form-group mb-4">
+              <label for="password" class="form-label-modern">Password</label>
+              <div class="input-group-modern">
+                <span class="input-group-icon"><i class="bi bi-lock-fill"></i></span>
+                <input type="password" class="form-control-modern" id="password" name="password" placeholder="Enter password" required autocomplete="current-password" />
+                <button type="button" class="input-toggle-pwd" id="togglePasswordBtn" title="Toggle password visibility">
+                  <i class="bi bi-eye" id="togglePasswordIcon"></i>
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-love-primary w-100 py-3 mb-3">
+              <span>Sign In to Our Space</span>
+              <i class="bi bi-arrow-right ms-2"></i>
+            </button>
+          </form>
+
+          <div class="auth-footer-note mt-3 pt-3 border-top">
+            <small class="text-muted d-block">
+              Private access for Raj and Ashmita only
+            </small>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

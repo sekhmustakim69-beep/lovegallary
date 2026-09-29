@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+
+{% block title %}Mood Swings Sanctuary — Our Little World{% endblock %}
+
+{% block content %}
+{% include 'nav.html' %}
+
+<section class="page-content py-4 py-md-5">
+  <div class="container-xl">
+    
+    <!-- Page Header -->
+    <div class="page-title-banner text-center mb-4">
+      <span class="mini-badge-rose mb-2">Gentle Comfort</span>
+      <h1 class="page-main-heading">🌧️ Mood Swings Sanctuary</h1>
+      <p class="page-sub-text">A safe space for honesty, bad days, gentle reassurance, and tight hugs.</p>
+    </div>
+
+    <!-- Loving Reassurance Message Banner -->
+    <div class="reassurance-banner lux-glass-panel p-4 mb-5 mx-auto text-center" style="max-width: 860px;">
+      <div class="reassurance-icon mb-2">🫂</div>
+      <p class="mb-0 fw-medium text-dark fst-italic">
+        "It's completely okay not to be okay. Whether you need silence, chocolate, or a warm forehead kiss, we will always listen with love."
+      </p>
+    </div>
+
+    <!-- Share a Note Form -->
+    <div class="lux-glass-panel p-4 p-md-5 mb-5 mx-auto" style="max-width: 860px;">
+      <h3 class="panel-section-title mb-3">
+        <i class="bi bi-heart-pulse-fill text-rose me-2"></i> Share How You're Feeling
+      </h3>
+
+      <form method="post" action="{{ url_for('mood_swings') }}">
+        <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+        
+        <div class="form-group mb-3">
+          <label class="form-label-modern" for="moodNoteInput">Write a gentle note</label>
+          <textarea class="form-control-modern" id="moodNoteInput" name="note" rows="3" placeholder="Tell me what's on your mind... I need a hug, a quiet moment, or just to hear your voice ❤️" required></textarea>
+        </div>
+
+        <div class="row align-items-center g-3">
+          <div class="col-md-6">
+            <label class="form-label-modern" for="statusSelect">Current Status</label>
+            <select class="form-select modern-select" id="statusSelect" name="status">
+              <option value="pending">⏳ Needs gentle care & hugs (Pending)</option>
+              <option value="resolved">✨ Feeling happier & comforted (Resolved)</option>
+            </select>
+          </div>
+          <div class="col-md-6 text-md-end pt-md-4">
+            <button type="submit" class="btn btn-love-primary px-4 py-2">
+              <i class="bi bi-send-fill me-1"></i> Share Comfort Note
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Notes List -->
+    <div class="notes-stream-wrap mx-auto" style="max-width: 860px;">
+      <div class="row g-4">
+        {% for item in notes %}
+          {% set is_mine = (item.user_id == session['user_id']) %}
+          <div class="col-12">
+            <div class="lux-care-note-card p-4 rounded-4 position-relative">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="user-avatar-emoji">
+                    {% if item.user_name|lower == 'raj' %}🤴{% else %}👸{% endif %}
+                  </span>
+                  <div>
+                    <strong class="d-block text-dark">{{ item.user_name }}</strong>
+                    <small class="text-muted">{{ item.created_at }}</small>
+                  </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-2">
+                  <span class="status-pill {{ item.status }}">
+                    {% if item.status == 'pending' %}
+                      ⏳ In Need of Comfort
+                    {% else %}
+                      💚 Calmed & Loved
+                    {% endif %}
+                  </span>
+
+                  {% if is_mine %}
+                    <div class="dropdown">
+                      <button class="btn btn-sm btn-link text-muted p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-three-dots-vertical"></i>
+                      </button>
+                      <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                        <li>
+                          <button class="dropdown-item small" type="button" data-bs-toggle="collapse" data-bs-target="#editNote{{ item.id }}">
+                            <i class="bi bi-pencil me-2 text-primary"></i> Edit Note
+                          </button>
+                        </li>
+                        <li>
+                          <form method="post" action="{{ url_for('delete_note', note_id=item.id) }}" onsubmit="return confirm('Delete this note?');">
+                            <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+                            <button class="dropdown-item small text-danger" type="submit">
+                              <i class="bi bi-trash3 me-2"></i> Delete
+                            </button>
+                          </form>
+                        </li>
+                      </ul>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+
+              <p class="note-prose mb-0">{{ item.note }}</p>
+
+              <!-- Edit Collapse -->
+              {% if is_mine %}
+                <div class="collapse mt-3 pt-3 border-top" id="editNote{{ item.id }}">
+                  <form method="post" action="{{ url_for('edit_note', note_id=item.id) }}">
+                    <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+                    <div class="mb-2">
+                      <textarea class="form-control-modern" name="note" rows="3" required>{{ item.note }}</textarea>
+                    </div>
+                    <div class="row g-2 align-items-center">
+                      <div class="col-sm-6">
+                        <select class="form-select modern-select" name="status">
+                          <option value="pending" {% if item.status == 'pending' %}selected{% endif %}>⏳ In Need of Comfort</option>
+                          <option value="resolved" {% if item.status == 'resolved' %}selected{% endif %}>💚 Calmed & Loved</option>
+                        </select>
+                      </div>
+                      <div class="col-sm-6 text-end">
+                        <button class="btn btn-sm btn-light me-1" type="button" data-bs-toggle="collapse" data-bs-target="#editNote{{ item.id }}">Cancel</button>
+                        <button class="btn btn-sm btn-love-primary" type="submit">Save Changes</button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              {% endif %}
+
+            </div>
+          </div>
+        {% else %}
+          <div class="col-12">
+            <div class="empty-state-card lux-glass-panel text-center py-5">
+              <div class="empty-state-icon mb-3">🌸</div>
+              <h4 class="mb-2">All Clear & Peaceful</h4>
+              <p class="text-muted mb-0">Whenever either of you feels low or needs care, write here anytime.</p>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</section>
+{% endblock %}

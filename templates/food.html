@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+
+{% block title %}Food Wishes & Date Nights — Our Little World{% endblock %}
+
+{% block content %}
+{% include 'nav.html' %}
+
+<section class="page-content py-4 py-md-5">
+  <div class="container-xl">
+    
+    <!-- Page Header -->
+    <div class="page-title-banner text-center mb-5">
+      <span class="mini-badge-rose mb-2">Date Night Menu</span>
+      <h1 class="page-main-heading">🍕 What Should We Eat?</h1>
+      <p class="page-sub-text">Our shared bucket list of late-night cravings, cozy cafe dates, and comfort treats.</p>
+    </div>
+
+    <!-- Add Food Wish Panel -->
+    <div class="lux-glass-panel p-4 p-md-5 mb-5 mx-auto" style="max-width: 900px;">
+      <h3 class="panel-section-title mb-3">
+        <i class="bi bi-cup-hot-fill text-rose me-2"></i> Add a Food Craving
+      </h3>
+
+      <!-- Note Suggestions -->
+      <div class="food-tags-bar mb-3">
+        <span class="small text-muted me-2">Quick Vibe Note (Tap to insert):</span>
+        <div class="d-flex flex-wrap gap-1 mt-1">
+          <button type="button" class="btn btn-sm food-tag-btn" data-note="Cozy candlelight dinner 🍷">Dinner Date 🍷</button>
+          <button type="button" class="btn btn-sm food-tag-btn" data-note="Late night 2 AM street food 🛵">Late Night 🌙</button>
+          <button type="button" class="btn btn-sm food-tag-btn" data-note="Extra spicy & cheesy 🧀">Extra Cheesy 🧀</button>
+          <button type="button" class="btn btn-sm food-tag-btn" data-note="Sweet dessert craving 🍦">Sweet Dessert 🍦</button>
+          <button type="button" class="btn btn-sm food-tag-btn" data-note="Comfort binge food for movie night 🍿">Movie Binge 🍿</button>
+        </div>
+      </div>
+
+      <form method="post" action="{{ url_for('food') }}" id="foodForm">
+        <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+        
+        <div class="row g-3 align-items-end">
+          <div class="col-md-5">
+            <label class="form-label-modern" for="foodNameInput">Dish / Cuisine</label>
+            <div class="input-group-modern">
+              <span class="input-group-icon"><i class="bi bi-egg-fried"></i></span>
+              <input type="text" class="form-control-modern" id="foodNameInput" name="food_name" placeholder="Momos, Pizza, Pasta, Biryani..." required>
+            </div>
+          </div>
+
+          <div class="col-md-5">
+            <label class="form-label-modern" for="foodNoteInput">Special Note / Place</label>
+            <div class="input-group-modern">
+              <span class="input-group-icon"><i class="bi bi-pencil-heart"></i></span>
+              <input type="text" class="form-control-modern" id="foodNoteInput" name="note" placeholder="Extra cheese, cozy cafe, must try...">
+            </div>
+          </div>
+
+          <div class="col-md-2">
+            <button type="submit" class="btn btn-love-primary w-100 py-3">
+              <i class="bi bi-plus-lg me-1"></i> Add
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Food Cravings Grid -->
+    <div class="row g-4 justify-content-center" style="max-width: 1000px; margin: 0 auto;">
+      {% for item in food_items %}
+        {% set is_mine = (item.user_id == session['user_id']) %}
+        <div class="col-md-6">
+          <div class="lux-food-card h-100 p-4 rounded-4 d-flex flex-column justify-content-between position-relative">
+            <div>
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <div class="d-flex align-items-center gap-2">
+                  <div class="food-emoji-icon">🍴</div>
+                  <h4 class="food-title mb-0 fw-bold">{{ item.food_name }}</h4>
+                </div>
+
+                {% if is_mine %}
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-link text-muted p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                      <i class="bi bi-three-dots-vertical"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                      <li>
+                        <button class="dropdown-item small" type="button" data-bs-toggle="collapse" data-bs-target="#editFood{{ item.id }}">
+                          <i class="bi bi-pencil me-2 text-primary"></i> Edit Wish
+                        </button>
+                      </li>
+                      <li>
+                        <form method="post" action="{{ url_for('delete_food', food_id=item.id) }}" onsubmit="return confirm('Delete this food wish?');">
+                          <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+                          <button class="dropdown-item small text-danger" type="submit">
+                            <i class="bi bi-trash3 me-2"></i> Delete
+                          </button>
+                        </form>
+                      </li>
+                    </ul>
+                  </div>
+                {% endif %}
+              </div>
+
+              <p class="food-note text-muted mb-3">
+                {% if item.note %}
+                  <i class="bi bi-chat-quote me-1 text-rose"></i> {{ item.note }}
+                {% else %}
+                  <span class="fst-italic">No special notes added. Ready to devour anytime!</span>
+                {% endif %}
+              </p>
+            </div>
+
+            <!-- Footer Meta -->
+            <div class="food-footer-meta pt-2 border-top d-flex justify-content-between align-items-center small text-muted">
+              <span>
+                <i class="bi bi-person-fill text-rose me-1"></i> Added by <strong>{{ item.user_name }}</strong>
+              </span>
+              <span>{{ item.created_at[:10] }}</span>
+            </div>
+
+            <!-- Edit Collapse -->
+            {% if is_mine %}
+              <div class="collapse mt-3 pt-3 border-top" id="editFood{{ item.id }}">
+                <form method="post" action="{{ url_for('edit_food', food_id=item.id) }}">
+                  <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+                  <div class="mb-2">
+                    <input type="text" class="form-control-modern" name="food_name" value="{{ item.food_name }}" required>
+                  </div>
+                  <div class="mb-2">
+                    <input type="text" class="form-control-modern" name="note" value="{{ item.note or '' }}" placeholder="Note">
+                  </div>
+                  <div class="d-flex justify-content-end gap-2">
+                    <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" data-bs-target="#editFood{{ item.id }}">Cancel</button>
+                    <button class="btn btn-sm btn-love-primary" type="submit">Save Changes</button>
+                  </div>
+                </form>
+              </div>
+            {% endif %}
+
+          </div>
+        </div>
+      {% else %}
+        <div class="col-12">
+          <div class="empty-state-card lux-glass-panel text-center py-5">
+            <div class="empty-state-icon mb-3">🍕</div>
+            <h4 class="mb-2">No Food Wishes Yet</h4>
+            <p class="text-muted mb-0">What is your stomach craving right now? Add your favorite dish above!</p>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,136 @@
+{# Birthday Celebration Component #}
+<div id="birthdayCelebrationRoot">
+  <!-- Top Celebration Announcement Bar -->
+  <div class="birthday-top-bar">
+    <div class="container d-flex flex-wrap justify-content-between align-items-center py-2">
+      <div class="bday-text d-flex align-items-center gap-2">
+        <span class="bday-icon pulse-animation">🎂</span>
+        <span>
+          <strong>Happy {{ birthday_info.age_formatted }} Birthday, {{ birthday_info.name }}!</strong>
+          <span class="d-none d-sm-inline">Today {{ birthday_info.name }} turns <strong>{{ birthday_info.age }}</strong> years old! ❤️</span>
+          {% if birthday_info.is_test_mode %}
+            <span class="badge bg-warning text-dark ms-2">Preview Mode (<a href="?test_bday=off" class="text-dark text-decoration-underline">Exit</a>)</span>
+          {% endif %}
+        </span>
+      </div>
+      <div class="bday-actions d-flex align-items-center gap-2 mt-1 mt-md-0">
+        <button type="button" class="btn btn-sm btn-light bday-btn" id="bdayPlayMusicBtn" title="Play romantic Hindi song">
+          <i class="bi bi-music-note-beamed text-danger"></i> <span id="bdayBtnMusicText">Play Songs</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-warning bday-btn" id="bdayConfettiBurstBtn" title="Celebrate with confetti">
+          🎉 Celebrate!
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-light bday-btn" data-bs-toggle="modal" data-bs-target="#birthdayWishModal" title="View birthday card">
+          💌 Card
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Balloons and Ribbons in Background -->
+  <div class="birthday-balloons-container" aria-hidden="true">
+    <div class="floating-balloon balloon-1">🎈</div>
+    <div class="floating-balloon balloon-2">💖</div>
+    <div class="floating-balloon balloon-3">🎈</div>
+    <div class="floating-balloon balloon-4">🎂</div>
+    <div class="floating-balloon balloon-5">✨</div>
+    <div class="floating-balloon balloon-6">🎈</div>
+    <div class="floating-balloon balloon-7">💖</div>
+    <div class="floating-balloon balloon-8">🌸</div>
+  </div>
+
+  <!-- Birthday Greeting Modal (Opens once or via Card button) -->
+  <div class="modal fade" id="birthdayWishModal" tabindex="-1" aria-labelledby="birthdayWishModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content bday-modal-card text-center p-4">
+        <div class="modal-header border-0 pb-0 justify-content-end">
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body pt-0">
+          <div class="bday-avatar-ring mb-3">
+            <span class="bday-avatar">{{ birthday_info.avatar }}</span>
+          </div>
+          <span class="badge bday-tag mb-2">🎉 {{ birthday_info.title }} 🎉</span>
+          <h2 class="bday-heading mb-1" id="birthdayWishModalLabel">
+            Happy {{ birthday_info.age_formatted }} Birthday!
+          </h2>
+          <h3 class="bday-subheading mb-3 text-gradient">
+            Dearest {{ birthday_info.name }} ❤️
+          </h3>
+
+          <div class="bday-age-highlight mb-4">
+            <span class="age-number">{{ birthday_info.age }}</span>
+            <span class="age-text">Years of Pure Magic & Sweet Memories ✨</span>
+          </div>
+
+          <p class="bday-wishes-text mb-4">
+            "{{ birthday_info.wishes }}"
+          </p>
+
+          <div class="d-flex flex-column gap-2">
+            <button type="button" class="btn btn-lg btn-love shadow" id="modalPlayRomanticBtn">
+              <i class="bi bi-play-circle-fill me-2"></i> Play Romantic Birthday Songs 🎵
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-1" data-bs-dismiss="modal">
+              Explore Our Memories
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Romantic Hindi Music Player Widget -->
+  <div id="floatingBirthdayMusicPlayer" class="floating-music-widget">
+    <div class="music-widget-header d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center gap-2">
+        <div class="music-disc-icon" id="musicDiscIcon">
+          <i class="bi bi-disc-fill"></i>
+        </div>
+        <div class="music-info-text text-truncate">
+          <div class="song-title-text fw-bold text-truncate" id="bdayPlayerSongTitle">
+            {{ initial_birthday_song.title }}
+          </div>
+          <small class="song-artist-text text-muted text-truncate d-block" id="bdayPlayerArtist">
+            {{ initial_birthday_song.movie }} • {{ initial_birthday_song.artist }}
+          </small>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-1 ms-2">
+        <button class="widget-mini-btn" id="togglePlayerSizeBtn" title="Minimize player">
+          <i class="bi bi-chevron-down" id="togglePlayerIcon"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Collapsible controls -->
+    <div class="music-widget-body" id="musicWidgetBody">
+      <div class="sound-wave-container my-2" id="soundWaveBar">
+        <span class="wave-bar"></span>
+        <span class="wave-bar"></span>
+        <span class="wave-bar"></span>
+        <span class="wave-bar"></span>
+        <span class="wave-bar"></span>
+      </div>
+      <div class="music-controls d-flex justify-content-between align-items-center mt-2">
+        <button type="button" class="btn btn-sm btn-light round-btn" id="bdayPrevOrRandomBtn" title="Play another random song">
+          <i class="bi bi-shuffle"></i> Random Song
+        </button>
+        <button type="button" class="btn btn-love btn-sm play-toggle-btn" id="bdayPlayPauseBtn" title="Play/Pause">
+          <i class="bi bi-play-fill" id="playPauseIcon"></i>
+        </button>
+        <button type="button" class="btn btn-sm btn-light round-btn" id="bdayMuteToggleBtn" title="Mute/Unmute">
+          <i class="bi bi-volume-up" id="muteIcon"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Hidden YouTube Player Container -->
+    <div id="ytPlayerContainer" style="position: absolute; width: 1px; height: 1px; left: -9999px; top: -9999px;">
+      <div id="ytBirthdayAudioPlayer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Canvas Confetti Library -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>

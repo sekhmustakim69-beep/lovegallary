@@ -1,0 +1,404 @@
+{% extends 'base.html' %}
+
+{% block title %}Location & Spots — Our Little World{% endblock %}
+
+{% block content %}
+{% include 'nav.html' %}
+
+<section class="page-content py-4 py-md-5">
+  <div class="container-xl">
+    
+    <!-- Page Header -->
+    <div class="page-title-banner text-center mb-5">
+      <span class="mini-badge-rose mb-2">Our Footprints</span>
+      <h1 class="page-main-heading">📍 Location & Pinned Spots</h1>
+      <p class="page-sub-text">Pinning where we are and keeping each other safe, no matter the distance.</p>
+    </div>
+
+    <section class="location-map-panel" aria-labelledby="locationMapTitle">
+      <div class="location-map-heading">
+        <div>
+          <h2 class="panel-section-title mb-1" id="locationMapTitle"><i class="bi bi-map me-2 text-rose"></i>Shared Map</h2>
+          <p class="small text-muted mb-0" id="liveMapStatus" aria-live="polite">Checking shared locations...</p>
+        </div>
+        <span class="small text-muted"><i class="bi bi-lock me-1"></i>Private to your two accounts</span>
+      </div>
+      <div class="location-map-frame">
+        <iframe id="liveLocationMap" title="Google Map of shared locations" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?q={{ map_latitude }},{{ map_longitude }}&amp;z=13&amp;output=embed"></iframe>
+      </div>
+      <div class="live-location-people" id="liveLocationPeople" aria-label="Currently sharing locations"></div>
+    </section>
+
+    <!-- Share Location Card -->
+    <div class="lux-glass-panel p-4 p-md-5 mb-5 mx-auto text-center" style="max-width: 760px;">
+      <div class="location-radar-icon mb-3">
+        <i class="bi bi-geo-alt-fill text-rose"></i>
+      </div>
+      <h3 class="panel-section-title mb-2">Share Your Spot Right Now</h3>
+      <p class="text-muted small mb-4">
+        Share a live location with each other while the site is open, or save a one-time check-in. Live sharing expires after one hour and can be stopped anytime.
+      </p>
+
+      <div class="live-sharing-controls text-start mb-4" id="liveSharingControls" data-current-user-id="{{ session.get('user_id') }}" data-fallback-latitude="{{ map_latitude }}" data-fallback-longitude="{{ map_longitude }}" data-live-api-url="{{ url_for('api_live_location') }}" data-share-api-url="{{ url_for('share_location') }}" data-csrf-token="{{ session.get('csrf_token') }}">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+          <div>
+            <h4 class="h6 fw-bold mb-1"><i class="bi bi-broadcast-pin me-2 text-rose"></i>Live location sharing</h4>
+            <p class="small text-muted mb-0">Your partner sees updates while this site is open. Sharing expires after one hour.</p>
+          </div>
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-love-primary" id="startLiveShareBtn" type="button">
+              <i class="bi bi-broadcast me-2"></i><span>Start Live Sharing</span>
+            </button>
+            <button class="btn btn-outline-danger d-none" id="stopLiveShareBtn" type="button" title="Stop sharing and delete your live location">
+              <i class="bi bi-trash3 me-2"></i>Stop &amp; Delete
+            </button>
+          </div>
+        </div>
+        <p class="live-share-status mt-3 mb-0" id="liveShareStatus" role="status" aria-live="polite"></p>
+      </div>
+
+      <!-- One-time GPS check-in -->
+      <button id="shareLocationBtn" class="btn btn-love-primary btn-lg px-5 py-3 mb-3" type="button">
+        <span id="locBtnSpinner" class="spinner-border spinner-border-sm me-2 d-none" role="status"></span>
+        <i class="bi bi-crosshair me-2" id="locBtnIcon"></i>
+        <span id="locBtnText">Save a One-Time Check-In</span>
+      </button>
+
+      <div id="locationStatusAlert" class="alert d-none mt-2 mb-3 text-start small" role="alert"></div>
+
+      <!-- Manual Coordinates Collapse -->
+      <div class="mt-3">
+        <button class="btn btn-link text-muted small text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#manualPinCollapse">
+          <i class="bi bi-sliders me-1"></i> Enter Custom Coordinates Manually
+        </button>
+        <div class="collapse mt-3" id="manualPinCollapse">
+          <form method="post" action="{{ url_for('share_location') }}" class="p-3 rounded-4 bg-light text-start">
+            <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+            <div class="row g-2 align-items-center">
+              <div class="col-sm-5">
+                <label class="small text-muted mb-1">Latitude</label>
+                <input type="number" step="any" class="form-control form-control-sm" name="latitude" id="manualLatInput" placeholder="e.g. 22.5726" required>
+              </div>
+              <div class="col-sm-5">
+                <label class="small text-muted mb-1">Longitude</label>
+                <input type="number" step="any" class="form-control form-control-sm" name="longitude" id="manualLonInput" placeholder="e.g. 88.3639" required>
+              </div>
+              <div class="col-sm-2 pt-sm-3">
+                <button type="submit" class="btn btn-sm btn-love-primary w-100">Pin</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Pinned Spots Grid -->
+    <div class="row g-4 justify-content-center" style="max-width: 900px; margin: 0 auto;">
+      {% for loc in recent_locations %}
+        {% set is_mine = (loc.user_id == session['user_id']) %}
+        <div class="col-md-6">
+          <div class="lux-location-card h-100 p-4 rounded-4 d-flex flex-column justify-content-between position-relative tilt-card" data-tilt>
+            <div>
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="user-avatar-emoji">
+                    {% if loc.user_name|lower == 'raj' %}🤴{% else %}👸{% endif %}
+                  </span>
+                  <div>
+                    <h5 class="mb-0 fw-bold text-dark">{{ loc.user_name }}</h5>
+                    <small class="text-muted">{{ loc.created_at }}</small>
+                  </div>
+                </div>
+
+                {% if is_mine %}
+                  <form method="post" action="{{ url_for('delete_location', location_id=loc.id) }}" onsubmit="return confirm('Delete this location pin?');">
+                    <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+                    <button class="btn btn-sm btn-link text-danger p-0 text-decoration-none" type="submit" title="Delete pin">
+                      <i class="bi bi-trash3"></i>
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+
+              <!-- Coordinates Display -->
+              <div class="coordinates-badge p-3 rounded-3 mb-3">
+                <div class="small text-muted mb-1"><i class="bi bi-pin-map-fill text-rose me-1"></i> Coordinates:</div>
+                <div class="font-monospace fw-bold text-dark fs-5">
+                  {{ "%.4f"|format(loc.latitude) }}°, {{ "%.4f"|format(loc.longitude) }}°
+                </div>
+              </div>
+            </div>
+
+            <!-- Open in Maps Link -->
+            <div class="pt-2 border-top">
+              <a class="btn btn-outline-love w-100 py-2" href="https://www.google.com/maps?q={{ loc.latitude }},{{ loc.longitude }}" target="_blank" rel="noreferrer">
+                <i class="bi bi-map-fill me-2"></i> Open in Google Maps
+              </a>
+            </div>
+
+          </div>
+        </div>
+      {% else %}
+        <div class="col-12">
+          <div class="empty-state-card lux-glass-panel text-center py-5">
+            <div class="empty-state-icon mb-3">📍</div>
+            <h4 class="mb-2">No Locations Shared Yet</h4>
+            <p class="text-muted mb-0">Tap the button above whenever you arrive somewhere or want to check in.</p>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const liveSharingControls = document.getElementById('liveSharingControls');
+  const liveApiUrl = liveSharingControls.dataset.liveApiUrl;
+  const shareApiUrl = liveSharingControls.dataset.shareApiUrl;
+  const csrfToken = liveSharingControls.dataset.csrfToken;
+  const currentUserId = Number(liveSharingControls.dataset.currentUserId);
+  const fallbackLatitude = Number(liveSharingControls.dataset.fallbackLatitude);
+  const fallbackLongitude = Number(liveSharingControls.dataset.fallbackLongitude);
+  const liveMap = document.getElementById('liveLocationMap');
+  const livePeople = document.getElementById('liveLocationPeople');
+  const liveMapStatus = document.getElementById('liveMapStatus');
+  const liveShareStatus = document.getElementById('liveShareStatus');
+  const startLiveShareBtn = document.getElementById('startLiveShareBtn');
+  const stopLiveShareBtn = document.getElementById('stopLiveShareBtn');
+  let selectedLiveUserId = null;
+
+  async function sendLiveAction(action, coords) {
+    const response = await fetch(liveApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({ action, ...coords, _csrf_token: csrfToken })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not update live sharing.');
+    return result;
+  }
+
+  function pointMapAt(location) {
+    const latitude = Number(location.latitude);
+    const longitude = Number(location.longitude);
+    const locationKey = `live:${location.user_id}:${latitude}:${longitude}`;
+    if (liveMap.dataset.locationKey !== locationKey) {
+      liveMap.src = `https://maps.google.com/maps?q=${latitude},${longitude}&z=15&output=embed`;
+      liveMap.title = `Google Map showing ${location.user_name}'s shared location`;
+      liveMap.dataset.locationKey = locationKey;
+    }
+    selectedLiveUserId = Number(location.user_id);
+    livePeople.querySelectorAll('.live-map-select').forEach(function (button) {
+      button.classList.toggle('active', Number(button.dataset.userId) === selectedLiveUserId);
+    });
+  }
+
+  function renderLiveLocations(locations) {
+    livePeople.replaceChildren();
+    if (!locations.length) {
+      liveMapStatus.textContent = 'No one is sharing live right now. The map shows the latest saved pin.';
+      const fallbackKey = `fallback:${fallbackLatitude}:${fallbackLongitude}`;
+      if (liveMap.dataset.locationKey !== fallbackKey) {
+        liveMap.src = `https://maps.google.com/maps?q=${fallbackLatitude},${fallbackLongitude}&z=13&output=embed`;
+        liveMap.title = 'Google Map showing the latest saved location pin';
+        liveMap.dataset.locationKey = fallbackKey;
+      }
+      selectedLiveUserId = null;
+    } else {
+      liveMapStatus.textContent = locations.length === 1
+        ? `${locations[0].user_name} is sharing live now.`
+        : `${locations.length} people are sharing live now.`;
+
+      locations.forEach(function (location) {
+        const button = document.createElement('button');
+        const icon = document.createElement('i');
+        const label = document.createElement('span');
+        button.type = 'button';
+        button.className = 'live-map-select';
+        button.dataset.userId = location.user_id;
+        icon.className = 'bi bi-geo-alt-fill';
+        label.textContent = `${location.user_name}${Number(location.user_id) === currentUserId ? ' (you)' : ''}`;
+        button.append(icon, label);
+        button.addEventListener('click', function () {
+          pointMapAt(location);
+        });
+        livePeople.append(button);
+      });
+
+      const selected = locations.find(function (location) {
+        return Number(location.user_id) === selectedLiveUserId;
+      }) || locations[0];
+      pointMapAt(selected);
+    }
+
+    const myLocation = locations.find(function (location) {
+      return Number(location.user_id) === currentUserId;
+    });
+    startLiveShareBtn.classList.toggle('d-none', Boolean(myLocation));
+    stopLiveShareBtn.classList.toggle('d-none', !myLocation);
+    liveShareStatus.textContent = myLocation
+      ? `Your live location is being shared. Last update: ${myLocation.updated_at} UTC. Sharing expires after one hour.`
+      : 'Your live location is not being shared.';
+  }
+
+  async function refreshLiveLocations() {
+    try {
+      const response = await fetch(liveApiUrl, { headers: { 'Accept': 'application/json' } });
+      if (!response.ok) throw new Error('Unable to refresh shared locations.');
+      const result = await response.json();
+      renderLiveLocations(result.locations || []);
+    } catch (error) {
+      liveMapStatus.textContent = error.message;
+    }
+  }
+
+  startLiveShareBtn.addEventListener('click', function () {
+    if (!navigator.geolocation) {
+      liveShareStatus.textContent = 'This browser does not support location sharing.';
+      return;
+    }
+    startLiveShareBtn.disabled = true;
+    liveShareStatus.textContent = 'Waiting for location permission...';
+    navigator.geolocation.getCurrentPosition(function (position) {
+      sendLiveAction('start', {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      }).then(function () {
+        liveShareStatus.textContent = 'Live sharing started. Your location will keep updating while the site is open.';
+        window.dispatchEvent(new Event('live-location-sharing-changed'));
+        return refreshLiveLocations();
+      }).catch(function (error) {
+        liveShareStatus.textContent = error.message;
+      }).finally(function () {
+        startLiveShareBtn.disabled = false;
+      });
+    }, function (error) {
+      startLiveShareBtn.disabled = false;
+      liveShareStatus.textContent = error.code === 1
+        ? 'Location permission was denied. Allow location access in your browser settings and try again.'
+        : 'Could not get your location. Check your connection and try again.';
+    }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+  });
+
+  stopLiveShareBtn.addEventListener('click', function () {
+    stopLiveShareBtn.disabled = true;
+    sendLiveAction('stop').then(function () {
+      liveShareStatus.textContent = 'Live sharing stopped and your live location was deleted.';
+      window.dispatchEvent(new Event('live-location-sharing-changed'));
+      return refreshLiveLocations();
+    }).catch(function (error) {
+      liveShareStatus.textContent = error.message;
+    }).finally(function () {
+      stopLiveShareBtn.disabled = false;
+    });
+  });
+
+  refreshLiveLocations();
+  window.setInterval(refreshLiveLocations, 15000);
+
+  const shareLocationBtn = document.getElementById('shareLocationBtn');
+  const locBtnSpinner = document.getElementById('locBtnSpinner');
+  const locBtnIcon = document.getElementById('locBtnIcon');
+  const locBtnText = document.getElementById('locBtnText');
+  const alertBox = document.getElementById('locationStatusAlert');
+  function showAlert(msg, type) {
+    if (!alertBox) return;
+    alertBox.className = `alert alert-${type} mt-3 mb-0`;
+    alertBox.innerHTML = msg;
+    alertBox.classList.remove('d-none');
+  }
+
+  function resetBtn() {
+    if (locBtnSpinner) locBtnSpinner.classList.add('d-none');
+    if (locBtnIcon) locBtnIcon.classList.remove('d-none');
+    if (locBtnText) locBtnText.textContent = 'Save a One-Time Check-In';
+    if (shareLocationBtn) shareLocationBtn.disabled = false;
+  }
+
+  function sendLocationData(lat, lon) {
+    const payload = {
+      latitude: lat,
+      longitude: lon,
+      _csrf_token: csrfToken
+    };
+
+    fetch(shareApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify(payload)
+    })
+    .then(function (res) {
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      return res.json();
+    })
+    .then(function (result) {
+      if (result.error) {
+        showAlert('⚠️ ' + result.error, 'danger');
+        resetBtn();
+      } else {
+        showAlert('<strong>Location pinned successfully!</strong> Refreshing...', 'success');
+        if (typeof confetti === 'function') {
+          confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
+        }
+        setTimeout(function () {
+          window.location.reload();
+        }, 900);
+      }
+    })
+    .catch(function (err) {
+      showAlert('⚠️ Failed to save location: ' + err.message, 'danger');
+      resetBtn();
+    });
+  }
+
+  if (shareLocationBtn) {
+    shareLocationBtn.addEventListener('click', function () {
+      if (!navigator.geolocation) {
+        showAlert('Your browser does not support geolocation. Please use custom coordinates below.', 'warning');
+        return;
+      }
+
+      locBtnSpinner.classList.remove('d-none');
+      locBtnIcon.classList.add('d-none');
+      locBtnText.textContent = 'Locating...';
+      shareLocationBtn.disabled = true;
+
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          sendLocationData(pos.coords.latitude, pos.coords.longitude);
+        },
+        function (err) {
+          resetBtn();
+          let msg = 'Could not retrieve location.';
+          if (err.code === 1) { // PERMISSION_DENIED
+            msg = '<strong>Permission Denied:</strong> Please click the tune/lock icon in your browser address bar and allow location access, or enter coordinates manually below.';
+          } else if (err.code === 2) { // POSITION_UNAVAILABLE
+            msg = '<strong>Position Unavailable:</strong> Network location is not available on this device. Please enter coordinates manually below.';
+          } else if (err.code === 3) { // TIMEOUT
+            msg = '<strong>Location Request Timed Out:</strong> Please try clicking again, or enter coordinates manually below.';
+          }
+          showAlert(msg, 'warning');
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 15000,
+          maximumAge: 60000
+        }
+      );
+    });
+  }
+
+});
+</script>
+{% endblock %}

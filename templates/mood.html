@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}Mood & Vibe Radar — Our Little World{% endblock %}
+
+{% block content %}
+{% include 'nav.html' %}
+
+<section class="page-content py-4 py-md-5">
+  <div class="container-xl">
+    
+    <!-- Page Header -->
+    <div class="page-title-banner text-center mb-5">
+      <span class="mini-badge-rose mb-2">Vibe Meter</span>
+      <h1 class="page-main-heading">✨ Current Song Vibe & Aura</h1>
+      <p class="page-sub-text">Translating our shared music and energy into romantic emotional harmony.</p>
+    </div>
+
+    <div class="row g-4 justify-content-center">
+      <!-- Current Vibe Card -->
+      <div class="col-lg-6">
+        <div class="lux-glass-panel vibe-hero-card p-4 p-md-5 text-center h-100 d-flex flex-column justify-content-between">
+          <div>
+            <span class="badge bg-rose-subtle text-rose rounded-pill px-3 py-2 mb-3">
+              <i class="bi bi-broadcast me-1"></i> Active Atmosphere
+            </span>
+            <h3 class="panel-section-title mb-4">Latest Shared Melody</h3>
+
+            <!-- Vibe Aura Orb Indicator -->
+            <div class="vibe-orb-showcase my-4">
+              <div class="vibe-glowing-sphere mx-auto">
+                <span class="vibe-emoji-huge">💖</span>
+              </div>
+            </div>
+
+            {% if latest %}
+              <div class="vibe-song-title fs-4 fw-bold text-dark mb-1">
+                {{ latest.song_title }}
+              </div>
+              <div class="vibe-detected-pill d-inline-block px-4 py-2 rounded-pill mt-2">
+                <span class="fw-bold fs-5">{{ current_vibe }}</span>
+              </div>
+              <div class="vibe-meta-subtext text-muted small mt-3">
+                Selected by <strong>{{ latest.user_name }}</strong> • {{ latest.created_at }}
+              </div>
+            {% else %}
+              <div class="text-muted py-3">
+                <p>No songs selected yet to gauge our vibe.</p>
+                <a href="{{ url_for('music') }}" class="btn btn-sm btn-love-primary">
+                  Pick a Melody
+                </a>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="vibe-footer-note pt-4 mt-4 border-top">
+            <small class="text-muted">
+              <i class="bi bi-heart-pulse text-danger me-1"></i> Music is how our souls talk when words fall short.
+            </small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Previous Vibe & Comparison -->
+      <div class="col-lg-6">
+        <div class="lux-glass-panel p-4 p-md-5 h-100 d-flex flex-column justify-content-between">
+          <div>
+            <span class="badge bg-light text-muted rounded-pill px-3 py-2 mb-3 border">
+              <i class="bi bi-clock-history me-1"></i> Previous Resonance
+            </span>
+            <h3 class="panel-section-title mb-4">Previous Song Vibe</h3>
+
+            {% if previous %}
+              <div class="previous-vibe-box p-4 rounded-4 mb-4">
+                <div class="previous-song-title fs-5 fw-bold text-dark mb-1">
+                  {{ previous.song_title }}
+                </div>
+                <div class="vibe-chip-badge d-inline-block px-3 py-1 rounded-pill mt-1">
+                  {{ previous_vibe }}
+                </div>
+                <small class="text-muted d-block mt-2">
+                  Added by {{ previous.user_name }} • {{ previous.created_at }}
+                </small>
+              </div>
+
+              <!-- Romantic Connection Insight -->
+              <div class="connection-insight-box p-3 rounded-4 bg-light">
+                <h6 class="fw-bold mb-1"><i class="bi bi-stars text-warning me-1"></i> Energy Shift</h6>
+                <p class="text-muted small mb-0">
+                  Moving from <strong>{{ previous_vibe }}</strong> to <strong>{{ current_vibe }}</strong> reflects our ever-growing playlist of shared moments and romantic nostalgia.
+                </p>
+              </div>
+            {% else %}
+              <div class="text-center py-4 text-muted">
+                <i class="bi bi-music-note fs-1 opacity-50 mb-2 d-block"></i>
+                <p class="mb-0">Previous vibe will appear here once more songs are added to our history.</p>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="mt-4 pt-3 border-top text-center">
+            <a href="{{ url_for('music') }}" class="btn btn-outline-love w-100">
+              <i class="bi bi-music-note-beamed me-2"></i> Browse & Change Song
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+{% endblock %}

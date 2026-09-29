@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+
+{% block title %}Memories & Photo Diary — Our Little World{% endblock %}
+
+{% block content %}
+{% include 'nav.html' %}
+
+<section class="page-content py-4 py-md-5">
+  <div class="container-xl">
+    
+    <!-- Page Header -->
+    <div class="page-title-banner text-center mb-5">
+      <span class="mini-badge-rose mb-2">Visual Diary</span>
+      <h1 class="page-main-heading">📸 Cherished Memories</h1>
+      <p class="page-sub-text">Every smile, every journey, every second we never want to forget.</p>
+    </div>
+
+    <!-- Upload Card with Live Preview Dropzone -->
+    <div class="lux-glass-panel upload-panel p-4 p-md-5 mb-5">
+      <h3 class="panel-section-title mb-4">
+        <i class="bi bi-cloud-arrow-up-fill text-rose me-2"></i> Add a New Memory
+      </h3>
+
+      <form method="post" enctype="multipart/form-data" action="{{ url_for('gallery') }}" id="galleryUploadForm">
+        <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+        
+        <div class="row g-4 align-items-center">
+          <div class="col-lg-6">
+            <div class="upload-dropzone" id="photoDropzone">
+              <input type="file" class="dropzone-file-input" id="photoInput" name="photo" accept="image/*" required>
+              <div class="dropzone-prompt text-center p-4" id="dropzonePrompt">
+                <div class="dropzone-icon mb-2">
+                  <i class="bi bi-images fs-1 text-rose"></i>
+                </div>
+                <div class="fw-bold mb-1">Choose a photo or drag & drop here</div>
+                <small class="text-muted d-block">Supports JPG, PNG, WEBP, GIF (Auto-compressed to fast WebP)</small>
+              </div>
+              <div class="dropzone-preview d-none" id="dropzonePreview">
+                <img src="" alt="Selected Preview" id="previewImg" class="img-preview-thumb">
+                <button type="button" class="btn btn-sm btn-danger preview-remove-btn" id="removePreviewBtn">
+                  <i class="bi bi-x"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-6">
+            <div class="form-group mb-3">
+              <label class="form-label-modern" for="photoCaption">Memory Caption</label>
+              <textarea class="form-control-modern gallery-caption-input" id="photoCaption" name="caption" rows="3" maxlength="200" placeholder="Write something sweet about this moment... ❤️"></textarea>
+              <div class="d-flex justify-content-between small text-muted mt-1">
+                <span>Maximum 200 characters</span>
+                <span id="captionCounter">0 / 200</span>
+              </div>
+            </div>
+
+            <button class="btn btn-love-primary w-100 py-3 mt-2" type="submit" id="uploadSubmitBtn">
+              <i class="bi bi-heart-fill me-2"></i> Save This Memory Forever
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Photo Grid -->
+    <div class="row g-4 photo-gallery-grid">
+      {% for photo in photos %}
+      <div class="col-sm-6 col-lg-4">
+        <div class="lux-polaroid-card h-100 d-flex flex-column justify-content-between">
+          <div class="polaroid-image-frame position-relative" data-bs-toggle="modal" data-bs-target="#photoModal{{ photo.id }}">
+            <img src="{{ url_for('uploaded_photo', filename=photo.filename) }}" alt="Memory" class="polaroid-img" loading="lazy">
+            <div class="polaroid-overlay">
+              <span class="view-btn-pill"><i class="bi bi-arrows-fullscreen me-1"></i> View Fullscreen</span>
+            </div>
+          </div>
+
+          <div class="polaroid-caption-body p-3 text-start">
+            <p class="polaroid-story mb-2">{{ photo.caption }}</p>
+            <div class="polaroid-footer-meta d-flex justify-content-between align-items-center pt-2 border-top">
+              <span class="uploader-chip">
+                <i class="bi bi-person-heart text-rose me-1"></i> {{ photo.uploader }}
+              </span>
+              <small class="photo-timestamp text-muted">{{ photo.created_at[:10] }}</small>
+            </div>
+            
+            <div class="text-end mt-2">
+              <form method="post" action="{{ url_for('delete_gallery_photo', photo_id=photo.id) }}" onsubmit="return confirm('Delete this memory?');" class="d-inline">
+                <input type="hidden" name="_csrf_token" value="{{ session.get('csrf_token') }}">
+                <button class="btn btn-sm btn-link text-danger p-0 text-decoration-none small" type="submit">
+                  <i class="bi bi-trash3 me-1"></i> Delete
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- High Resolution Fullscreen Lightbox Modal -->
+      <div class="modal fade photo-lightbox-modal" id="photoModal{{ photo.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+          <div class="modal-content lux-glass-modal border-0">
+            <div class="modal-header border-0 pb-0 justify-content-between">
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-rose-subtle text-rose rounded-pill px-3 py-2">
+                  <i class="bi bi-heart-fill me-1"></i> {{ photo.uploader }}
+                </span>
+                <span class="text-muted small">{{ photo.created_at }}</span>
+              </div>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center p-3 p-md-4">
+              <img src="{{ url_for('uploaded_photo', filename=photo.filename) }}" class="img-fluid rounded-4 shadow-lg modal-hero-img" alt="{{ photo.caption }}">
+              {% if photo.caption %}
+                <div class="modal-caption-text mt-3 mx-auto">
+                  <p class="fs-5 mb-0 fw-medium">"{{ photo.caption }}"</p>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="col-12">
+        <div class="empty-state-card lux-glass-panel text-center py-5">
+          <div class="empty-state-icon mb-3">📸</div>
+          <h4 class="mb-2">No Memories Uploaded Yet</h4>
+          <p class="text-muted mb-4">Be the first to upload a sweet moment of Raj & Ashmita.</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</section>
+{% endblock %}
